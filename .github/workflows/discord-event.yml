@@ -1,0 +1,74 @@
+name: Reusable Discord Event
+
+on:
+  workflow_call:
+    secrets:
+      DISCORD_WEBHOOK:
+        required: true
+    inputs:
+      role_id:
+        required: false
+        type: string
+        default: "1432766644337377290"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord Embed
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          ROLE_ID: ${{ inputs.role_id }}
+        run: |
+          MENTION="<@&$ROLE_ID>"
+          EVENT_NAME="${{ github.event_name }}"
+          ACTION="${{ github.event.action }}"
+          IS_MERGED="${{ github.event.pull_request.merged }}"
+          ACTOR="${{ github.actor }}"
+          ACTOR_ICON="https://github.com/${ACTOR}.png"
+          TIMESTAMP=$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')
+          URL="https://github.com/${{ github.repository }}"
+          TITLE="Thông báo"
+          DESC="Có biến!"
+          COLOR=3447003
+
+          if [ "$EVENT_NAME" == "pull_request" ]; then
+            URL="${{ github.event.pull_request.html_url }}"
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            PR_TITLE=${PR_TITLE//\"/\\\"}
+            if [ "$ACTION" == "opened" ]; then
+              TITLE="🔔 New Pull Request: $PR_TITLE"
+              DESC="Đại ca **$ACTOR** vừa quăng PR. Vào review gấp!"
+              COLOR=3447003
+            elif [ "$IS_MERGED" == "true" ]; then
+              TITLE="🚀 PR Merged: $PR_TITLE"
+              DESC="Code của **$ACTOR** đã merge vào Main."
+              COLOR=5763719
+            else
+              TITLE="❌ PR Closed: $PR_TITLE"
+              DESC="PR của **$ACTOR** đã bị đóng."
+              COLOR=15548997
+            fi
+          elif [ "$EVENT_NAME" == "push" ]; then
+            TITLE="⚡ New Push to Main"
+            URL="${{ github.event.head_commit.url }}"
+            RAW_COMMIT="${{ github.event.head_commit.message }}"
+            SAFE_COMMIT=$(echo "$RAW_COMMIT" | head -n 1 | sed 's/"/\\"/g')
+            DESC="Thánh **$ACTOR** đẩy code vào Main.\nCommit: \`$SAFE_COMMIT\`"
+            COLOR=16776960
+          fi
+
+          cat <<EOF > payload.json
+          {
+            "content": "$MENTION",
+            "embeds": [{
+              "title": "$TITLE",
+              "description": "$DESC",
+              "url": "$URL",
+              "color": $COLOR,
+              "author": { "name": "$ACTOR", "icon_url": "$ACTOR_ICON" },
+              "timestamp": "$TIMESTAMP"
+            }]
+          }
+          EOF
+          curl -H "Content-Type: application/json" -X POST -d @payload.json "$DISCORD_WEBHOOK"

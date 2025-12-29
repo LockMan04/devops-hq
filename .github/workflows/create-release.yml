@@ -1,0 +1,59 @@
+name: Reusable Create Release
+
+on:
+  workflow_call:
+    secrets:
+      DISCORD_WEBHOOK:
+        required: true
+      TOKEN:
+        required: true
+
+jobs:
+  release:
+    name: Release & Notify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version info
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            VER=$(grep '^version:' pubspec.yaml | sed 's/version: //' | sed 's/+.*//')
+            echo "tag_name=v$VER-build-${{ github.run_number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: Release ${{ steps.version.outputs.tag_name }}
+          files: |
+            artifacts/app-release-apk/app-release.apk
+            artifacts/app-release-ipa/app-release.ipa
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}
+
+      - name: Notify Discord Release
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          curl -H "Content-Type: application/json" -X POST -d '{
+            "embeds": [{
+              "title": "Build Completed",
+              "description": "Phiên bản **${{ steps.version.outputs.tag_name }}** đã build xong rồi nè mấy ní ơi",
+              "color": 3066993,
+              "fields": [
+                {"name": "Android", "value": "APK Available", "inline": true},
+                {"name": "iOS", "value": "IPA Available", "inline": true},
+                {"name": "Download", "value": "[GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag_name }})", "inline": false}
+              ]
+            }]
+          }' $DISCORD_WEBHOOK
