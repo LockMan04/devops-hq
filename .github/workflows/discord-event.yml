@@ -35,29 +35,52 @@ jobs:
           if [ "$EVENT_NAME" == "pull_request" ]; then
             URL="${{ github.event.pull_request.html_url }}"
             PR_TITLE="${{ github.event.pull_request.title }}"
+            # Escape double quotes in title
             PR_TITLE=${PR_TITLE//\"/\\\"}
+
             if [ "$ACTION" == "opened" ]; then
-              TITLE="🔔 New Pull Request: $PR_TITLE"
+              TITLE="New Pull Request: $PR_TITLE"
               DESC="Đại ca **$ACTOR** vừa quăng PR. Vào review gấp!"
               COLOR=3447003
-            elif [ "$IS_MERGED" == "true" ]; then
-              TITLE="🚀 PR Merged: $PR_TITLE"
-              DESC="Code của **$ACTOR** đã merge vào Main."
-              COLOR=5763719
+            
+            elif [ "$ACTION" == "synchronize" ]; then
+              TITLE="PR Updated: $PR_TITLE"
+              DESC="**$ACTOR** vừa đẩy thêm commit mới vào PR này. Check hàng!"
+              COLOR=16776960
+
+            elif [ "$ACTION" == "closed" ]; then
+              if [ "$IS_MERGED" == "true" ]; then
+                TITLE="PR Merged: $PR_TITLE"
+                DESC="Code của **$ACTOR** đã được merge vào nhánh chính."
+                COLOR=5763719
+              else
+                TITLE="PR Closed: $PR_TITLE"
+                DESC="PR của **$ACTOR** đã bị đóng mà không merge."
+                COLOR=15548997
+              fi
+            
+            elif [ "$ACTION" == "reopened" ]; then
+              TITLE="PR Reopened: $PR_TITLE"
+              DESC="**$ACTOR** đã mở lại PR này."
+              COLOR=3447003
+            
             else
-              TITLE="❌ PR Closed: $PR_TITLE"
-              DESC="PR của **$ACTOR** đã bị đóng."
-              COLOR=15548997
+              TITLE="PR Update ($ACTION): $PR_TITLE"
+              DESC="Trạng thái PR thay đổi: $ACTION"
+              COLOR=10330528
             fi
+
           elif [ "$EVENT_NAME" == "push" ]; then
-            TITLE="⚡ New Push to Main"
+            TITLE="New Push to Main"
             URL="${{ github.event.head_commit.url }}"
             RAW_COMMIT="${{ github.event.head_commit.message }}"
+            # Get first line and escape quotes
             SAFE_COMMIT=$(echo "$RAW_COMMIT" | head -n 1 | sed 's/"/\\"/g')
-            DESC="Thánh **$ACTOR** đẩy code vào Main.\nCommit: \`$SAFE_COMMIT\`"
+            DESC="Thánh **$ACTOR** đẩy code thẳng vào Main.\nCommit: \`$SAFE_COMMIT\`"
             COLOR=16776960
           fi
 
+          # Create JSON payload
           cat <<EOF > payload.json
           {
             "content": "$MENTION",
@@ -71,4 +94,5 @@ jobs:
             }]
           }
           EOF
+
           curl -H "Content-Type: application/json" -X POST -d @payload.json "$DISCORD_WEBHOOK"
