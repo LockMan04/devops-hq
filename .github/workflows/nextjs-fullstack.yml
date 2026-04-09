@@ -50,19 +50,25 @@ jobs:
           DOCS_ROUTE: ${{ inputs.docs_route }}
           API_HEALTH_ROUTE: ${{ inputs.api_health_route }}
         run: |
+          RETRY_COUNT=60
+          RETRY_SLEEP=2
+
           npm run start -- --hostname 127.0.0.1 --port "$PORT" &
           APP_PID=$!
           trap 'kill $APP_PID' EXIT
 
-          for i in {1..60}; do
+          for i in $(seq 1 "$RETRY_COUNT"); do
             if curl -fsS "http://127.0.0.1:$PORT$DOCS_ROUTE" >/dev/null; then
               break
             fi
-            if [ "$i" -eq 60 ]; then
+            if [ "$i" -eq "$RETRY_COUNT" ]; then
               echo "Docs route did not become ready: $DOCS_ROUTE"
               exit 1
             fi
-            sleep 2
+            sleep "$RETRY_SLEEP"
           done
 
-          curl -fsS "http://127.0.0.1:$PORT$API_HEALTH_ROUTE" >/dev/null
+          if ! curl -fsS "http://127.0.0.1:$PORT$API_HEALTH_ROUTE" >/dev/null; then
+            echo "API health route check failed: $API_HEALTH_ROUTE"
+            exit 1
+          fi
