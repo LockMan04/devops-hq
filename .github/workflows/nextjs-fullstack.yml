@@ -19,6 +19,14 @@ on:
         required: false
         type: number
         default: 3000
+      retry_count:
+        required: false
+        type: number
+        default: 60
+      retry_sleep_seconds:
+        required: false
+        type: number
+        default: 2
 
 jobs:
   validate-docs-and-api:
@@ -49,20 +57,31 @@ jobs:
           PORT: ${{ inputs.app_port }}
           DOCS_ROUTE: ${{ inputs.docs_route }}
           API_HEALTH_ROUTE: ${{ inputs.api_health_route }}
+          RETRY_COUNT: ${{ inputs.retry_count }}
+          RETRY_SLEEP: ${{ inputs.retry_sleep_seconds }}
         run: |
-          RETRY_COUNT=60
-          RETRY_SLEEP=2
+          APP_LOG=nextjs-app.log
 
-          npm run start -- --hostname 127.0.0.1 --port "$PORT" &
+          npm run start -- --hostname 127.0.0.1 --port "$PORT" >"$APP_LOG" 2>&1 &
           APP_PID=$!
           trap 'kill $APP_PID' EXIT
+          sleep 1
+
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            echo "Next.js app failed to start. Logs:"
+            cat "$APP_LOG"
+            exit 1
+          fi
 
           for i in $(seq 1 "$RETRY_COUNT"); do
             if curl -fsS "http://127.0.0.1:$PORT$DOCS_ROUTE" >/dev/null; then
+              echo "Docs route is ready: $DOCS_ROUTE"
               break
             fi
             if [ "$i" -eq "$RETRY_COUNT" ]; then
               echo "Docs route did not become ready: $DOCS_ROUTE"
+              echo "App logs:"
+              cat "$APP_LOG"
               exit 1
             fi
             sleep "$RETRY_SLEEP"
@@ -70,5 +89,7 @@ jobs:
 
           if ! curl -fsS "http://127.0.0.1:$PORT$API_HEALTH_ROUTE" >/dev/null; then
             echo "API health route check failed: $API_HEALTH_ROUTE"
+            echo "App logs:"
+            cat "$APP_LOG"
             exit 1
           fi
