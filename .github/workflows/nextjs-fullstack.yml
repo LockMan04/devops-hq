@@ -36,6 +36,7 @@ jobs:
   validate-docs-and-api:
     name: Validate Docs UI and API Endpoints
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +70,7 @@ jobs:
           APP_HOST=127.0.0.1
           CLEANUP_SLEEP_SECONDS="$RETRY_SLEEP"
 
-          if ! npm run | grep -qE '^[[:space:]]+start[[:space:]]*$'; then
+          if ! node -e "const p=require('./package.json'); if(!p.scripts?.start) process.exit(1)"; then
             echo "Missing required npm script: start"
             exit 1
           fi
@@ -106,20 +107,26 @@ jobs:
           wait_for_route() {
             local route="$1"
             local route_label="$2"
+            local i=0
+            local http_code=""
 
-            for i in $(seq 1 "$RETRY_COUNT"); do
-              if curl -fsS "http://$APP_HOST:$PORT$route" >/dev/null; then
+            while [ "$i" -lt "$RETRY_COUNT" ]; do
+              http_code="$(curl -o /dev/null -w "%{http_code}" -sS "http://$APP_HOST:$PORT$route" || echo "000")"
+              if [ "$http_code" = "200" ]; then
                 echo "$route_label route is ready: $route"
                 return 0
               fi
-              if [ "$i" -eq "$RETRY_COUNT" ]; then
-                echo "Route check failed ($route_label): $route"
-                echo "App logs:"
-                cat "$APP_LOG"
-                return 1
+
+              i=$((i + 1))
+              if [ "$i" -lt "$RETRY_COUNT" ]; then
+                sleep "$RETRY_SLEEP"
               fi
-              sleep "$RETRY_SLEEP"
             done
+
+            echo "Route check failed ($route_label): $route (last_http_status=$http_code)"
+            echo "App logs:"
+            cat "$APP_LOG"
+            return 1
           }
 
           wait_for_route "$DOCS_ROUTE" "Docs" || exit 1
