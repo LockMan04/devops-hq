@@ -68,7 +68,7 @@ jobs:
           APP_LOG=nextjs-app.log
           APP_HOST=127.0.0.1
 
-          if ! npm run | grep -qE '^[[:space:]]+start'; then
+          if ! npm run | grep -qE '^[[:space:]]+start[[:space:]]*$'; then
             echo "Missing required npm script: start"
             exit 1
           fi
@@ -97,7 +97,7 @@ jobs:
             local failed_message="$3"
 
             for i in $(seq 1 "$RETRY_COUNT"); do
-              if curl -fsS "http://127.0.0.1:$PORT$route" >/dev/null; then
+              if curl -fsS "http://$APP_HOST:$PORT$route" >/dev/null; then
                 echo "$ready_message"
                 return 0
               fi
