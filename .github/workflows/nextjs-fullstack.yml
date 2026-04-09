@@ -103,5 +103,5 @@ jobs:
             done
           }
 
-          wait_for_route "$DOCS_ROUTE" "Docs route is ready: $DOCS_ROUTE" "Docs route did not become ready: $DOCS_ROUTE"
-          wait_for_route "$API_HEALTH_ROUTE" "API health route is ready: $API_HEALTH_ROUTE" "API health route check failed: $API_HEALTH_ROUTE"
+          wait_for_route "$DOCS_ROUTE" "Docs route is ready: $DOCS_ROUTE" "Docs route did not become ready: $DOCS_ROUTE" || exit 1
+          wait_for_route "$API_HEALTH_ROUTE" "API health route is ready: $API_HEALTH_ROUTE" "API health route check failed: $API_HEALTH_ROUTE" || exit 1
