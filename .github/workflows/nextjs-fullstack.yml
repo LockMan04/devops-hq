@@ -72,7 +72,7 @@ jobs:
             exit 1
           fi
 
-          npm run start -- --hostname 127.0.0.1 --port "$PORT" >"$APP_LOG" 2>&1 &
+          PORT="$PORT" HOSTNAME=127.0.0.1 npm run start >"$APP_LOG" 2>&1 &
           APP_PID=$!
           trap 'kill $APP_PID' EXIT
           sleep "$STARTUP_PROBE_DELAY"
@@ -103,5 +103,5 @@ jobs:
             done
           }
 
-          wait_for_route "$DOCS_ROUTE" "Docs route is ready: $DOCS_ROUTE" "Docs route did not become ready: $DOCS_ROUTE" || exit 1
-          wait_for_route "$API_HEALTH_ROUTE" "API health route is ready: $API_HEALTH_ROUTE" "API health route check failed: $API_HEALTH_ROUTE" || exit 1
+          wait_for_route "$DOCS_ROUTE" "Docs route is ready: $DOCS_ROUTE" "Route check failed: $DOCS_ROUTE" || exit 1
+          wait_for_route "$API_HEALTH_ROUTE" "API health route is ready: $API_HEALTH_ROUTE" "Route check failed: $API_HEALTH_ROUTE" || exit 1
