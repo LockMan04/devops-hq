@@ -71,8 +71,7 @@ jobs:
           SHUTDOWN_WAIT_SECONDS="$RETRY_SLEEP"
           HTTP_CODE_CURL_FAILED="000"
 
-          if ! node -e "const p=require('./package.json'); if(!p.scripts?.start) process.exit(1)"; then
-            echo "Missing required npm script: start"
+          if ! node -e "try { const p=require('./package.json'); if(!p?.scripts?.start){ console.error('Missing required npm script: start'); process.exit(1);} } catch (e) { console.error('Unable to read package.json:', e.message); process.exit(1); }"; then
             exit 1
           fi
 
@@ -110,12 +109,17 @@ jobs:
             local route_label="$2"
             local i=0
             local http_code=""
+            local curl_exit=0
 
             while [ "$i" -lt "$RETRY_COUNT" ]; do
-              http_code="$(curl -o /dev/null -w "%{http_code}" -sS "http://$APP_HOST:$PORT$route" || echo "$HTTP_CODE_CURL_FAILED")"
-              if [ "$http_code" = "200" ]; then
+              curl_exit=0
+              http_code="$(curl -o /dev/null -w "%{http_code}" -sS "http://$APP_HOST:$PORT$route")" || curl_exit=$?
+              if [ "$curl_exit" -eq 0 ] && [ "$http_code" = "200" ]; then
                 echo "$route_label route is ready: $route"
                 return 0
+              fi
+              if [ "$curl_exit" -ne 0 ]; then
+                http_code="$HTTP_CODE_CURL_FAILED"
               fi
 
               i=$((i + 1))
@@ -124,7 +128,7 @@ jobs:
               fi
             done
 
-            echo "Route check failed ($route_label): $route (last_http_status=$http_code)"
+            echo "Route check failed ($route_label): $route (last_http_status=$http_code, last_curl_exit=$curl_exit)"
             echo "App logs:"
             cat "$APP_LOG"
             return 1
