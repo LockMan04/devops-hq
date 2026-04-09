@@ -1,0 +1,68 @@
+name: Reusable Next.js Fullstack Docs/API
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        required: false
+        type: string
+        default: "20"
+      docs_route:
+        required: false
+        type: string
+        default: "/docs"
+      api_health_route:
+        required: false
+        type: string
+        default: "/api/health"
+      app_port:
+        required: false
+        type: number
+        default: 3000
+
+jobs:
+  validate-docs-and-api:
+    name: Validate Docs UI and API Endpoints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Test
+        run: npm run test --if-present
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke test docs UI and API
+        env:
+          PORT: ${{ inputs.app_port }}
+          DOCS_ROUTE: ${{ inputs.docs_route }}
+          API_HEALTH_ROUTE: ${{ inputs.api_health_route }}
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port "$PORT" &
+          APP_PID=$!
+          trap 'kill $APP_PID' EXIT
+
+          for i in {1..60}; do
+            if curl -fsS "http://127.0.0.1:$PORT$DOCS_ROUTE" >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Docs route did not become ready: $DOCS_ROUTE"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl -fsS "http://127.0.0.1:$PORT$API_HEALTH_ROUTE" >/dev/null
