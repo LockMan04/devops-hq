@@ -56,7 +56,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Smoke test docs UI and API
+      - name: Start application and verify docs/API routes
         env:
           PORT: ${{ inputs.app_port }}
           DOCS_ROUTE: ${{ inputs.docs_route }}
@@ -66,6 +66,11 @@ jobs:
           STARTUP_PROBE_DELAY: ${{ inputs.startup_probe_delay_seconds }}
         run: |
           APP_LOG=nextjs-app.log
+
+          if ! npm run | grep -qE '^[[:space:]]+start'; then
+            echo "Missing required npm script: start"
+            exit 1
+          fi
 
           npm run start -- --hostname 127.0.0.1 --port "$PORT" >"$APP_LOG" 2>&1 &
           APP_PID=$!
@@ -78,30 +83,25 @@ jobs:
             exit 1
           fi
 
-          for i in $(seq 1 "$RETRY_COUNT"); do
-            if curl -fsS "http://127.0.0.1:$PORT$DOCS_ROUTE" >/dev/null; then
-              echo "Docs route is ready: $DOCS_ROUTE"
-              break
-            fi
-            if [ "$i" -eq "$RETRY_COUNT" ]; then
-              echo "Docs route did not become ready: $DOCS_ROUTE"
-              echo "App logs:"
-              cat "$APP_LOG"
-              exit 1
-            fi
-            sleep "$RETRY_SLEEP"
-          done
+          wait_for_route() {
+            local route="$1"
+            local ready_message="$2"
+            local failed_message="$3"
 
-          for i in $(seq 1 "$RETRY_COUNT"); do
-            if curl -fsS "http://127.0.0.1:$PORT$API_HEALTH_ROUTE" >/dev/null; then
-              echo "API health route is ready: $API_HEALTH_ROUTE"
-              break
-            fi
-            if [ "$i" -eq "$RETRY_COUNT" ]; then
-              echo "API health route check failed: $API_HEALTH_ROUTE"
-              echo "App logs:"
-              cat "$APP_LOG"
-              exit 1
-            fi
-            sleep "$RETRY_SLEEP"
-          done
+            for i in $(seq 1 "$RETRY_COUNT"); do
+              if curl -fsS "http://127.0.0.1:$PORT$route" >/dev/null; then
+                echo "$ready_message"
+                return 0
+              fi
+              if [ "$i" -eq "$RETRY_COUNT" ]; then
+                echo "$failed_message"
+                echo "App logs:"
+                cat "$APP_LOG"
+                return 1
+              fi
+              sleep "$RETRY_SLEEP"
+            done
+          }
+
+          wait_for_route "$DOCS_ROUTE" "Docs route is ready: $DOCS_ROUTE" "Docs route did not become ready: $DOCS_ROUTE"
+          wait_for_route "$API_HEALTH_ROUTE" "API health route is ready: $API_HEALTH_ROUTE" "API health route check failed: $API_HEALTH_ROUTE"
