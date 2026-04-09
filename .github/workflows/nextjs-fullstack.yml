@@ -67,7 +67,7 @@ jobs:
         run: |
           APP_LOG=nextjs-app.log
           APP_HOST=127.0.0.1
-          CLEANUP_WAIT="$RETRY_SLEEP"
+          CLEANUP_SLEEP_SECONDS="$RETRY_SLEEP"
 
           if ! npm run | grep -qE '^[[:space:]]+start[[:space:]]*$'; then
             echo "Missing required npm script: start"
@@ -76,13 +76,13 @@ jobs:
 
           cleanup() {
             kill "$APP_PID" 2>/dev/null || true
-            sleep "$CLEANUP_WAIT"
+            sleep "$CLEANUP_SLEEP_SECONDS"
             kill -9 "$APP_PID" 2>/dev/null || true
           }
 
           validate_route() {
             local route="$1"
-            if [[ ! "$route" =~ ^/[A-Za-z0-9._~/%-]*$ ]]; then
+            if [[ ! "$route" =~ ^/[A-Za-z0-9/_-]*$ ]]; then
               echo "Invalid route input: $route"
               return 1
             fi
