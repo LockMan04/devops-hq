@@ -67,6 +67,7 @@ jobs:
         run: |
           APP_LOG=nextjs-app.log
           APP_HOST=127.0.0.1
+          CLEANUP_WAIT="$RETRY_SLEEP"
 
           if ! npm run | grep -qE '^[[:space:]]+start[[:space:]]*$'; then
             echo "Missing required npm script: start"
@@ -75,9 +76,20 @@ jobs:
 
           cleanup() {
             kill "$APP_PID" 2>/dev/null || true
-            sleep 1
+            sleep "$CLEANUP_WAIT"
             kill -9 "$APP_PID" 2>/dev/null || true
           }
+
+          validate_route() {
+            local route="$1"
+            if [[ ! "$route" =~ ^/[A-Za-z0-9._~/%-]*$ ]]; then
+              echo "Invalid route input: $route"
+              return 1
+            fi
+          }
+
+          validate_route "$DOCS_ROUTE" || exit 1
+          validate_route "$API_HEALTH_ROUTE" || exit 1
 
           export HOSTNAME="$APP_HOST"
           npm run start >"$APP_LOG" 2>&1 &
@@ -93,16 +105,15 @@ jobs:
 
           wait_for_route() {
             local route="$1"
-            local ready_message="$2"
-            local failed_message="$3"
+            local route_label="$2"
 
             for i in $(seq 1 "$RETRY_COUNT"); do
               if curl -fsS "http://$APP_HOST:$PORT$route" >/dev/null; then
-                echo "$ready_message"
+                echo "$route_label route is ready: $route"
                 return 0
               fi
               if [ "$i" -eq "$RETRY_COUNT" ]; then
-                echo "$failed_message"
+                echo "Route check failed ($route_label): $route"
                 echo "App logs:"
                 cat "$APP_LOG"
                 return 1
@@ -111,5 +122,5 @@ jobs:
             done
           }
 
-          wait_for_route "$DOCS_ROUTE" "Docs route is ready: $DOCS_ROUTE" "Route check failed: $DOCS_ROUTE" || exit 1
-          wait_for_route "$API_HEALTH_ROUTE" "API health route is ready: $API_HEALTH_ROUTE" "Route check failed: $API_HEALTH_ROUTE" || exit 1
+          wait_for_route "$DOCS_ROUTE" "Docs" || exit 1
+          wait_for_route "$API_HEALTH_ROUTE" "API health" || exit 1
