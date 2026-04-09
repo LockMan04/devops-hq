@@ -78,7 +78,9 @@ jobs:
           cleanup() {
             kill "$APP_PID" 2>/dev/null || true
             sleep "$SHUTDOWN_WAIT_SECONDS"
-            kill -9 "$APP_PID" 2>/dev/null || true
+            if kill -0 "$APP_PID" 2>/dev/null; then
+              kill -9 "$APP_PID" 2>/dev/null || true
+            fi
           }
 
           validate_route() {
