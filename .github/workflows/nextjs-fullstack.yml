@@ -66,15 +66,23 @@ jobs:
           STARTUP_PROBE_DELAY: ${{ inputs.startup_probe_delay_seconds }}
         run: |
           APP_LOG=nextjs-app.log
+          APP_HOST=127.0.0.1
 
           if ! npm run | grep -qE '^[[:space:]]+start'; then
             echo "Missing required npm script: start"
             exit 1
           fi
 
-          PORT="$PORT" HOSTNAME=127.0.0.1 npm run start >"$APP_LOG" 2>&1 &
+          cleanup() {
+            kill "$APP_PID" 2>/dev/null || true
+            sleep 1
+            kill -9 "$APP_PID" 2>/dev/null || true
+          }
+
+          export HOSTNAME="$APP_HOST"
+          npm run start >"$APP_LOG" 2>&1 &
           APP_PID=$!
-          trap 'kill $APP_PID' EXIT
+          trap cleanup EXIT
           sleep "$STARTUP_PROBE_DELAY"
 
           if ! kill -0 "$APP_PID" 2>/dev/null; then
